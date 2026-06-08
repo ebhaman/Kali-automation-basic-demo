@@ -39,7 +39,6 @@ jobs:
     timeout-minutes: 180          # full install can take 60-90 min
 
     env:
-      OUTPUT_DIR: ${{ runner.temp }}/kali-output
       KALI_ISO_URL: "https://cdimage.kali.org/kali-2026.1/kali-linux-2026.1-installer-amd64.iso"
       KALI_SHA256_URL: "https://cdimage.kali.org/kali-2026.1/SHA256SUMS"
 
@@ -47,6 +46,10 @@ jobs:
       # ── 0. Checkout ────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up environment
+        run: |
+          echo "OUTPUT_DIR=${{ runner.temp }}/kali-output" >> "$GITHUB_ENV"
 
       # ── 1. Preflight checks ────────────────────────────────────────────────
       - name: Check KVM availability
