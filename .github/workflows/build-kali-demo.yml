@@ -114,7 +114,7 @@ jobs:
 
           # Extract the checksum for our specific ISO
           ISO_FILENAME=$(basename "$KALI_ISO_URL")
-          CHECKSUM=$(grep "$ISO_FILENAME" /tmp/kali-SHA256SUMS | awk '{print $1}')
+          CHECKSUM=$(grep " $ISO_FILENAME$" /tmp/kali-SHA256SUMS | awk '{print $1}')
 
           if [ -z "$CHECKSUM" ]; then
             echo "❌ Could not find checksum for $ISO_FILENAME in SHA256SUMS"
