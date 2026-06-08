@@ -109,9 +109,10 @@ jobs:
           echo "--- SHA256SUMS file content (installer lines) ---"
           grep "installer-amd64" /tmp/kali-SHA256SUMS || true
 
-          # Extract the checksum for our specific ISO
+          # Extract the checksum for our specific ISO — use word-boundary match
+          # to avoid also matching the .torrent line which contains the same filename
           ISO_FILENAME=$(basename "$KALI_ISO_URL")
-          CHECKSUM=$(grep "$ISO_FILENAME" /tmp/kali-SHA256SUMS | awk '{print $1}')
+          CHECKSUM=$(grep -E "^[0-9a-f]+  ${ISO_FILENAME}$" /tmp/kali-SHA256SUMS | awk '{print $1}')
 
           if [ -z "$CHECKSUM" ]; then
             echo "❌ Could not find checksum for $ISO_FILENAME in SHA256SUMS"
