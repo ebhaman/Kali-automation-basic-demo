@@ -39,6 +39,7 @@ jobs:
     timeout-minutes: 180          # full install can take 60-90 min
 
     env:
+      OUTPUT_DIR: ${{ runner.temp }}/kali-output
       KALI_ISO_URL: "https://cdimage.kali.org/kali-2026.1/kali-linux-2026.1-installer-amd64.iso"
       KALI_SHA256_URL: "https://cdimage.kali.org/kali-2026.1/SHA256SUMS"
 
@@ -46,10 +47,6 @@ jobs:
       # ── 0. Checkout ────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up environment
-        run: |
-          echo "OUTPUT_DIR=${{ runner.temp }}/kali-output" >> "$GITHUB_ENV"
 
       # ── 1. Preflight checks ────────────────────────────────────────────────
       - name: Check KVM availability
@@ -114,7 +111,7 @@ jobs:
 
           # Extract the checksum for our specific ISO
           ISO_FILENAME=$(basename "$KALI_ISO_URL")
-          CHECKSUM=$(grep " $ISO_FILENAME$" /tmp/kali-SHA256SUMS | awk '{print $1}')
+          CHECKSUM=$(grep "$ISO_FILENAME" /tmp/kali-SHA256SUMS | awk '{print $1}')
 
           if [ -z "$CHECKSUM" ]; then
             echo "❌ Could not find checksum for $ISO_FILENAME in SHA256SUMS"
@@ -157,10 +154,15 @@ jobs:
           echo "Out  : $OUTPUT_DIR"
           echo ""
 
+          # Remove any leftover output dir from a previous run — Packer refuses
+          # to start if the directory already exists (unless -force is passed).
+          rm -rf "$OUTPUT_DIR"
           mkdir -p "$OUTPUT_DIR"
 
           # PACKER_LOG=1 enables verbose Packer output in the Actions log
+          # -force also handles the case where Packer itself manages the dir
           PACKER_LOG=1 packer build \
+            -force \
             -on-error=abort \
             -var "iso_url=$KALI_ISO_URL" \
             -var "iso_checksum=$KALI_ISO_CHECKSUM" \
