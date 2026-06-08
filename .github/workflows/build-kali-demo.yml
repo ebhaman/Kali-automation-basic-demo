@@ -87,11 +87,16 @@ jobs:
           fi
 
           # QEMU / KVM
+          # On RHEL/Rocky the KVM binary is /usr/libexec/qemu-kvm, not
+          # qemu-system-x86_64. Create a symlink so Packer finds it in PATH.
           if ! command -v qemu-system-x86_64 &>/dev/null; then
             echo "Installing QEMU..."
             sudo dnf install -y qemu-kvm qemu-img
-          else
-            echo "QEMU already installed: $(qemu-system-x86_64 --version | head -1)"
+          fi
+
+          if [ ! -f /usr/local/bin/qemu-system-x86_64 ] && [ -f /usr/libexec/qemu-kvm ]; then
+            sudo ln -sf /usr/libexec/qemu-kvm /usr/local/bin/qemu-system-x86_64
+            echo "Symlinked /usr/libexec/qemu-kvm -> /usr/local/bin/qemu-system-x86_64"
           fi
 
           echo ""
