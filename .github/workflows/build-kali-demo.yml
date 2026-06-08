@@ -1,0 +1,225 @@
+# =============================================================================
+# .github/workflows/build-kali-demo.yml
+#
+# Demo pipeline: GitHub Action → fetch Kali ISO → Packer build → local template
+#
+# Trigger:   Manual (workflow_dispatch) or weekly schedule
+# Runner:    Self-hosted WSL Rocky Linux runner
+# Output:    kali-template.qcow2  +  manifest.json  in ~/kali-output/
+# =============================================================================
+
+name: Build Kali Demo Template
+
+on:
+  # ── Manual trigger with optional inputs ──────────────────────────────────
+  workflow_dispatch:
+    inputs:
+      disk_size_mb:
+        description: "Disk size in MiB (default 20480 = 20 GB)"
+        required: false
+        default: "20480"
+      memory_mb:
+        description: "RAM in MiB allocated to build VM (default 2048)"
+        required: false
+        default: "2048"
+
+  # ── Weekly automated build — every Monday at 02:00 UTC ───────────────────
+  schedule:
+    - cron: "0 2 * * 1"
+
+# Only one build at a time — cancels any in-progress run when a new one starts
+concurrency:
+  group: kali-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "Packer → Kali QCOW2"
+    runs-on: self-hosted          # ← your WSL Rocky Linux runner
+    timeout-minutes: 180          # full install can take 60-90 min
+
+    env:
+      OUTPUT_DIR: ${{ runner.temp }}/kali-output
+      KALI_ISO_URL: "https://cdimage.kali.org/kali-2026.1/kali-linux-2026.1-installer-amd64.iso"
+      KALI_SHA256_URL: "https://cdimage.kali.org/kali-2026.1/SHA256SUMS"
+
+    steps:
+      # ── 0. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 1. Preflight checks ────────────────────────────────────────────────
+      - name: Check KVM availability
+        run: |
+          echo "=== KVM check ==="
+          if [ -e /dev/kvm ]; then
+            echo "✅ /dev/kvm present"
+            ls -la /dev/kvm
+          else
+            echo "❌ /dev/kvm not found — nested virtualisation may be disabled"
+            echo "   On WSL2: ensure [wsl2] nestedVirtualization=true in .wslconfig"
+            exit 1
+          fi
+
+          echo ""
+          echo "=== CPU virtualisation flags ==="
+          grep -E --color=never 'vmx|svm' /proc/cpuinfo | head -3 || \
+            echo "No vmx/svm flags found — hardware virt may not be exposed"
+
+          echo ""
+          echo "=== Runner identity ==="
+          whoami
+          groups
+
+      - name: Install build dependencies
+        run: |
+          echo "=== Installing Packer + QEMU ==="
+
+          # Packer
+          if ! command -v packer &>/dev/null; then
+            echo "Installing Packer..."
+            sudo dnf install -y dnf-plugins-core
+            sudo dnf config-manager --add-repo \
+              https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+            sudo dnf install -y packer
+          else
+            echo "Packer already installed: $(packer version)"
+          fi
+
+          # QEMU / KVM
+          if ! command -v qemu-system-x86_64 &>/dev/null; then
+            echo "Installing QEMU..."
+            sudo dnf install -y qemu-kvm qemu-img
+          else
+            echo "QEMU already installed: $(qemu-system-x86_64 --version | head -1)"
+          fi
+
+          echo ""
+          echo "=== Tool versions ==="
+          packer version
+          qemu-system-x86_64 --version | head -1
+
+      # ── 2. Fetch + verify Kali ISO checksum ───────────────────────────────
+      - name: Fetch and verify ISO checksum
+        run: |
+          echo "=== Fetching SHA256SUMS from kali.org ==="
+          curl -fsSL "$KALI_SHA256_URL" -o /tmp/kali-SHA256SUMS
+
+          echo ""
+          echo "--- SHA256SUMS file content (installer lines) ---"
+          grep "installer-amd64" /tmp/kali-SHA256SUMS || true
+
+          # Extract the checksum for our specific ISO
+          ISO_FILENAME=$(basename "$KALI_ISO_URL")
+          CHECKSUM=$(grep "$ISO_FILENAME" /tmp/kali-SHA256SUMS | awk '{print $1}')
+
+          if [ -z "$CHECKSUM" ]; then
+            echo "❌ Could not find checksum for $ISO_FILENAME in SHA256SUMS"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ Checksum for $ISO_FILENAME : $CHECKSUM"
+
+          # Export for the Packer step
+          echo "KALI_ISO_CHECKSUM=sha256:${CHECKSUM}" >> "$GITHUB_ENV"
+          echo "ISO_FILENAME=$ISO_FILENAME"           >> "$GITHUB_ENV"
+
+      # ── 3. Packer init (install QEMU plugin) ──────────────────────────────
+      - name: Packer init
+        run: |
+          echo "=== Installing Packer QEMU plugin ==="
+          packer plugins install github.com/hashicorp/qemu
+        working-directory: packer
+
+      # ── 4. Packer validate ────────────────────────────────────────────────
+      - name: Packer validate
+        run: |
+          echo "=== Validating Packer template ==="
+          packer validate \
+            -var "iso_url=$KALI_ISO_URL" \
+            -var "iso_checksum=$KALI_ISO_CHECKSUM" \
+            -var "output_dir=$OUTPUT_DIR" \
+            -var "disk_size=${{ github.event.inputs.disk_size_mb || '20480' }}" \
+            -var "memory=${{ github.event.inputs.memory_mb || '2048' }}" \
+            kali-demo.pkr.hcl
+        working-directory: packer
+
+      # ── 5. Packer build ───────────────────────────────────────────────────
+      - name: Packer build — Kali template
+        run: |
+          echo "=== Starting Packer build ==="
+          echo "ISO  : $KALI_ISO_URL"
+          echo "SHA  : $KALI_ISO_CHECKSUM"
+          echo "Out  : $OUTPUT_DIR"
+          echo ""
+
+          mkdir -p "$OUTPUT_DIR"
+
+          # PACKER_LOG=1 enables verbose Packer output in the Actions log
+          PACKER_LOG=1 packer build \
+            -on-error=abort \
+            -var "iso_url=$KALI_ISO_URL" \
+            -var "iso_checksum=$KALI_ISO_CHECKSUM" \
+            -var "output_dir=$OUTPUT_DIR" \
+            -var "disk_size=${{ github.event.inputs.disk_size_mb || '20480' }}" \
+            -var "memory=${{ github.event.inputs.memory_mb || '2048' }}" \
+            kali-demo.pkr.hcl
+        working-directory: packer
+
+      # ── 6. Verify output ──────────────────────────────────────────────────
+      - name: Verify template output
+        run: |
+          echo "=== Build output ==="
+          ls -lh "$OUTPUT_DIR/"
+
+          TEMPLATE="$OUTPUT_DIR/kali-template.qcow2"
+          if [ -f "$TEMPLATE" ]; then
+            echo ""
+            echo "✅ Template created: $TEMPLATE"
+            echo "   Size : $(du -sh "$TEMPLATE" | cut -f1)"
+            echo "   SHA256: $(sha256sum "$TEMPLATE" | awk '{print $1}')"
+          else
+            echo "❌ Template file not found at $TEMPLATE"
+            exit 1
+          fi
+
+          echo ""
+          echo "=== Manifest ==="
+          cat "$OUTPUT_DIR/manifest.json" 2>/dev/null || echo "(no manifest.json)"
+
+      # ── 7. Stamp build metadata ───────────────────────────────────────────
+      - name: Write build summary
+        run: |
+          TEMPLATE="$OUTPUT_DIR/kali-template.qcow2"
+          SIZE=$(du -sh "$TEMPLATE" | cut -f1)
+          SHA=$(sha256sum "$TEMPLATE" | awk '{print $1}')
+
+          # Write to GitHub Actions job summary (visible in the Actions UI)
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ✅ Kali Template Build Complete
+
+          | Field        | Value |
+          |-------------|-------|
+          | ISO source  | \`$KALI_ISO_URL\` |
+          | ISO checksum | \`$KALI_ISO_CHECKSUM\` |
+          | Template    | \`$TEMPLATE\` |
+          | Size        | $SIZE |
+          | SHA256      | \`$SHA\` |
+          | Build #     | ${{ github.run_number }} |
+          | Triggered   | ${{ github.event_name }} |
+          | Runner      | ${{ runner.name }} |
+          EOF
+
+          echo "Summary written to Actions job summary."
+
+      # ── 8. Upload template as Actions artifact (optional, 30-day retention) 
+      # Uncomment if you want the .qcow2 downloadable from the Actions UI.
+      # Note: file is typically 3-8 GB — GitHub allows up to 10 GB per artifact.
+      #
+      # - name: Upload template artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: kali-template-${{ github.run_number }}
+      #     path: ${{ runner.temp }}/kali-output/kali-template.qcow2
+      #     retention-days: 30
