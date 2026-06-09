@@ -19,11 +19,8 @@ variable "iso_url" {
 }
 
 variable "iso_checksum" {
-  description = "SHA256 checksum — fetched dynamically at build time if left as 'none'"
+  description = "SHA256 checksum — fetched dynamically at build time"
   default     = "none"
-  # Set to "none" so the pipeline fetches + verifies the checksum file from
-  # kali.org before Packer runs (see the workflow verify step).
-  # For a pinned build supply: sha256:<hash>
 }
 
 variable "output_dir" {
@@ -33,7 +30,7 @@ variable "output_dir" {
 
 variable "disk_size" {
   description = "VM disk size in MiB"
-  default     = "20480"   # 20 GB — enough for a demo, keeps build time short
+  default     = "20480"
 }
 
 variable "memory" {
@@ -54,8 +51,13 @@ variable "ssh_password" {
   default = "kali"
 }
 
+variable "headless" {
+  description = "Set false to attach VNC and watch the installer"
+  default     = "false"
+}
+
 # ---------------------------------------------------------------------------
-# Source — QEMU builder (local KVM, no vSphere required)
+# Source — QEMU builder
 # ---------------------------------------------------------------------------
 
 source "qemu" "kali" {
@@ -73,29 +75,47 @@ source "qemu" "kali" {
   memory    = var.memory
   cpus      = var.cpus
 
-  # KVM acceleration — requires kvm group membership on the runner
-  accelerator = "kvm"
-  headless    = true
+  # KVM
+  accelerator  = "kvm"
+  headless     = var.headless
+  qemu_binary  = "qemu-system-x86_64"
 
-  # HTTP server — serves the preseed.cfg to the installer
+  # VNC — connect to localhost:5956 during build to watch the installer
+  # (only useful when headless = false)
+  vnc_bind_address = "127.0.0.1"
+  vnc_port_min     = 5956
+  vnc_port_max     = 5956
+
+  # HTTP server — serves preseed.cfg to the installer
   http_directory = "${path.root}/../http"
 
-  # SSH communicator — Packer connects here after install to run provisioners
+  # SSH communicator
   communicator  = "ssh"
   ssh_username  = var.ssh_username
   ssh_password  = var.ssh_password
-  ssh_timeout   = "60m"
+  ssh_timeout   = "90m"
+  host_port_min = 2222
+  host_port_max = 2222
 
   shutdown_command = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
 
-  # Boot — send keys to the GRUB menu to start an automated preseed install
-  boot_wait = "8s"
+  # Boot command — Kali installer ISO (Debian-based) boots a GRUB menu.
+  # <esc> drops to the boot: prompt; we then supply the full kernel cmdline
+  # pointing the installer at our preseed URL.
+  #
+  # boot_wait: time to wait for BIOS POST + GRUB to appear before typing.
+  # Increase to 20s if the build machine is slow to POST.
+  boot_wait = "12s"
   boot_command = [
-    "<esc><wait2>",
-    "auto url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg ",
-    "hostname=kali-template domain=local ",
+    "<esc><wait5>",
+    "/install.amd/vmlinuz ",
+    "initrd=/install.amd/initrd.gz ",
+    "auto=true ",
+    "url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg ",
+    "hostname=kali-template ",
+    "domain=local ",
     "DEBIAN_FRONTEND=noninteractive ",
-    "--- quiet<enter>"
+    "quiet ---<enter>"
   ]
 }
 
@@ -107,19 +127,16 @@ build {
   name    = "kali-demo"
   sources = ["source.qemu.kali"]
 
-  # Step 1 — wait for cloud connectivity and update package lists
   provisioner "shell" {
-    script = "${path.root}/../scripts/01-base.sh"
+    script          = "${path.root}/../scripts/01-base.sh"
     execute_command = "echo '${var.ssh_password}' | sudo -S bash '{{ .Path }}'"
   }
 
-  # Step 2 — cleanup before sealing the template
   provisioner "shell" {
-    script = "${path.root}/../scripts/99-cleanup.sh"
+    script          = "${path.root}/../scripts/99-cleanup.sh"
     execute_command = "echo '${var.ssh_password}' | sudo -S bash '{{ .Path }}'"
   }
 
-  # Post-processor — write a build manifest (name, size, sha256, timestamp)
   post-processor "manifest" {
     output     = "${var.output_dir}/manifest.json"
     strip_path = true

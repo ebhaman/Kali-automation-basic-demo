@@ -175,6 +175,7 @@ jobs:
             -var "output_dir=$OUTPUT_DIR" \
             -var "disk_size=${{ github.event.inputs.disk_size_mb || '20480' }}" \
             -var "memory=${{ github.event.inputs.memory_mb || '2048' }}" \
+            -var "headless=false" \
             kali-demo.pkr.hcl
         working-directory: packer
 
