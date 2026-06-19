@@ -1,0 +1,37 @@
+Warning: A checksum of 'none' was specified. Since ISO files are so big,
+a checksum is highly recommended.
+
+  on kali-demo.pkr.hcl line 64:
+  (source code not available)
+
+
+[1;32mkali-demo.qemu.kali: output will be in this color.[0m
+
+[1;32m==> kali-demo.qemu.kali: Retrieving ISO[0m
+[1;32m==> kali-demo.qemu.kali: Trying https://cdimage.kali.org/kali-2026.1/kali-linux-2026.1-installer-amd64.iso[0m
+[1;32m==> kali-demo.qemu.kali: Trying https://cdimage.kali.org/kali-2026.1/kali-linux-2026.1-installer-amd64.iso[0m
+[1;32m==> kali-demo.qemu.kali: https://cdimage.kali.org/kali-2026.1/kali-linux-2026.1-installer-amd64.iso => /home/bhand508/.cache/packer/0d70a8c451409f6c93de724a7e74ee7a319e3577.iso[0m
+[1;32m==> kali-demo.qemu.kali: Starting HTTP server on port 8204[0m
+[1;32m==> kali-demo.qemu.kali: Found port for communicator (SSH, WinRM, etc): 2222.[0m
+[1;32m==> kali-demo.qemu.kali: Creating temporary RSA SSH key for instance...[0m
+[1;32m==> kali-demo.qemu.kali: Looking for available port between 5956 and 5956 on 127.0.0.1[0m
+[1;32m==> kali-demo.qemu.kali: Starting VM, booting from CD-ROM[0m
+[1;32m==> kali-demo.qemu.kali: The VM will be run headless, without a GUI. If you want to
+==> kali-demo.qemu.kali: view the screen of the VM, connect via VNC without a password to
+==> kali-demo.qemu.kali: vnc://127.0.0.1:5956[0m
+[1;32m==> kali-demo.qemu.kali: Waiting 12s for boot...[0m
+[1;32m==> kali-demo.qemu.kali: Connecting to VM via VNC (127.0.0.1:5956)[0m
+[1;32m==> kali-demo.qemu.kali: Typing the boot commands over VNC...[0m
+[1;32m==> kali-demo.qemu.kali: Not using a NetBridge -- skipping StepWaitGuestAddress[0m
+[1;32m==> kali-demo.qemu.kali: Using SSH communicator to connect: 127.0.0.1[0m
+[1;32m==> kali-demo.qemu.kali: Waiting for SSH to become available...[0m
+[1;31m==> kali-demo.qemu.kali: Timeout waiting for SSH.[0m
+[1;32m==> kali-demo.qemu.kali: Deleting output directory...[0m
+[1;31mBuild 'kali-demo.qemu.kali' errored after 1 hour 30 minutes: Timeout waiting for SSH.[0m
+
+==> Wait completed after 1 hour 30 minutes
+
+==> Some builds didn't complete successfully and had errors:
+--> kali-demo.qemu.kali: Timeout waiting for SSH.
+
+==> Builds finished but no artifacts were created.

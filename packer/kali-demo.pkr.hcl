@@ -53,7 +53,8 @@ variable "ssh_password" {
 
 variable "headless" {
   description = "Set false to attach VNC and watch the installer"
-  default     = "false"
+  type        = bool
+  default     = true
 }
 
 # ---------------------------------------------------------------------------
@@ -115,7 +116,7 @@ source "qemu" "kali" {
     "hostname=kali-template ",
     "domain=local ",
     "DEBIAN_FRONTEND=noninteractive ",
-    "quiet ---<enter>"
+    "---<enter>"
   ]
 }
 
