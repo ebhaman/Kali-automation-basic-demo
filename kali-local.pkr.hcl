@@ -14,12 +14,12 @@ packer {
 
 variable "kali_iso_url" {
   description = "Kali Linux installer ISO URL"
-  default     = "https://cdimage.kali.org/kali-2024.4/kali-linux-2024.4-installer-amd64.iso"
+  default     = "https://cdimage.kali.org/kali-2026.1/kali-linux-2026.1-installer-amd64.iso"
 }
 
 variable "kali_iso_checksum" {
   description = "SHA256 checksum of the ISO"
-  default     = "sha256:b1b5f21a3c22b9e88f4384cad8e6c5be00c59779c04f78d01b5e6f18fd9cb7a3"
+  default     = "sha256:271477ad6ea2676c7346576971b9acc2d32fabd9c2bbaf0e6302397626149306"
 }
 
 variable "vm_name" {
@@ -77,13 +77,14 @@ source "qemu" "kali" {
   communicator = "ssh"
   ssh_username = "kali"
   ssh_password = var.ssh_password
-  ssh_timeout  = "45m"
+  ssh_timeout  = "90m"
+  ssh_wait_timeout = "20m"
 
   # --- Shutdown -----------------------------------------------------------
   shutdown_command = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
 
   # --- Boot (points to our preseed over HTTP) -----------------------------
-  boot_wait = "6s"
+  boot_wait = "10s"
   boot_command = [
     "<esc><wait>",
     "auto url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg ",
